@@ -16,19 +16,19 @@ interface LiveJob {
 }
 
 function fitColor(score: number) {
-  if (score >= 90) return { bar: 'bg-green-500', badge: 'bg-green-500/20 text-green-400 border-green-500/30', text: 'text-green-400' };
-  if (score >= 75) return { bar: 'bg-teal-500', badge: 'bg-teal-500/20 text-teal-400 border-teal-500/30', text: 'text-teal-400' };
-  if (score >= 60) return { bar: 'bg-amber-500', badge: 'bg-amber-500/20 text-amber-400 border-amber-500/30', text: 'text-amber-400' };
-  return { bar: 'bg-rose-500', badge: 'bg-rose-500/20 text-rose-400 border-rose-500/30', text: 'text-rose-400' };
+  if (score >= 90) return { bar: 'bg-green-500', badge: 'bg-green-50 text-green-700 border-green-200', text: 'text-green-600' };
+  if (score >= 75) return { bar: 'bg-teal-500', badge: 'bg-teal-50 text-teal-700 border-teal-200', text: 'text-teal-600' };
+  if (score >= 60) return { bar: 'bg-amber-500', badge: 'bg-amber-50 text-amber-700 border-amber-200', text: 'text-amber-600' };
+  return { bar: 'bg-rose-500', badge: 'bg-rose-50 text-rose-700 border-rose-200', text: 'text-rose-600' };
 }
 
 function JobCard({ job }: { job: JobMatch }) {
   const c = fitColor(job.fit_score);
   return (
-    <div className="bg-slate-900/60 border border-slate-700/30 rounded-2xl p-5 flex flex-col gap-4 hover:border-slate-600/50 transition-colors">
+    <div className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col gap-4 hover:border-violet-300 transition-colors shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-white font-semibold text-base leading-tight">{job.title}</h3>
+          <h3 className="text-slate-900 font-semibold text-base leading-tight">{job.title}</h3>
           <p className="text-slate-500 text-xs mt-0.5">{job.company_type}</p>
         </div>
         <span className={`shrink-0 border text-xs font-bold px-2.5 py-1 rounded-full ${c.badge}`}>
@@ -42,7 +42,7 @@ function JobCard({ job }: { job: JobMatch }) {
           <span className="text-slate-500">Fit Score</span>
           <span className={`font-bold ${c.text}`}>{job.fit_score}%</span>
         </div>
-        <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-violet-100 rounded-full overflow-hidden">
           <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${job.fit_score}%` }}
@@ -52,19 +52,19 @@ function JobCard({ job }: { job: JobMatch }) {
         </div>
       </div>
 
-      <div className="text-xs text-slate-400 font-medium">{job.salary_range}</div>
+      <div className="text-xs text-slate-600 font-medium">{job.salary_range}</div>
 
       {/* Reasons */}
       <div className="space-y-1.5">
         {job.match_reasons.map((r, i) => (
-          <div key={i} className="flex items-start gap-2 text-xs text-slate-300">
-            <CheckCircle size={12} className="text-green-400 shrink-0 mt-0.5" />
+          <div key={i} className="flex items-start gap-2 text-xs text-slate-700">
+            <CheckCircle size={12} className="text-green-600 shrink-0 mt-0.5" />
             {r}
           </div>
         ))}
         {job.gap_areas.map((g, i) => (
-          <div key={i} className="flex items-start gap-2 text-xs text-slate-400">
-            <AlertCircle size={12} className="text-amber-400 shrink-0 mt-0.5" />
+          <div key={i} className="flex items-start gap-2 text-xs text-slate-500">
+            <AlertCircle size={12} className="text-amber-500 shrink-0 mt-0.5" />
             {g}
           </div>
         ))}
@@ -102,6 +102,7 @@ export function ResumeGrader() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [liveJobs, setLiveJobs] = useState<LiveJob[] | null>(null);
   const [liveJobsLoading, setLiveJobsLoading] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState('');
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -128,9 +129,10 @@ export function ResumeGrader() {
   const analyze = async () => {
     setLoading(true);
     setIsDemo(false);
+    setAnalyzeError('');
     setLiveJobs(null);
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 25000);
+    const timer = setTimeout(() => controller.abort(), 45000);
     try {
       const fd = new FormData();
       if (file) fd.append('file', file);
@@ -143,17 +145,24 @@ export function ResumeGrader() {
         signal: controller.signal,
       });
       clearTimeout(timer);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data: ParseResult = await res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        setAnalyzeError(data?.error ?? `Server error (${res.status}) — please try again.`);
+        return;
+      }
       if (!data.job_matches?.length) throw new Error('Empty response');
-      setResult(data);
-      // kick off live job search for top match in parallel
+      setResult(data as ParseResult);
       if (data.job_matches[0]?.title) fetchLiveJobs(data.job_matches[0].title);
-    } catch {
+    } catch (err: unknown) {
       clearTimeout(timer);
-      setIsDemo(true);
-      setResult(FALLBACK);
-      fetchLiveJobs(jobTitle || 'Software Engineer');
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('aborted') || msg.includes('abort')) {
+        setAnalyzeError('Request timed out — the AI is taking too long. Please try again.');
+      } else if (msg.includes('fetch') || msg.includes('network') || msg.includes('Failed')) {
+        setAnalyzeError('Cannot reach the backend. Make sure the server is running on port 8000.');
+      } else {
+        setAnalyzeError('Something went wrong. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -176,26 +185,101 @@ export function ResumeGrader() {
         className="max-w-6xl mx-auto px-6 py-16"
       >
         {isDemo && (
-          <div className="mb-8 bg-amber-900/30 border border-amber-700/40 rounded-xl px-5 py-3 flex items-center gap-3 text-sm">
-            <span className="text-amber-400 text-lg">⚠️</span>
-            <span className="text-amber-300">
+          <div className="mb-8 bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 flex items-center gap-3 text-sm">
+            <span className="text-amber-500 text-lg">⚠️</span>
+            <span className="text-amber-700">
               <strong>Sample data</strong> — the AI backend is not reachable. Start the backend server for real personalized analysis.
             </span>
           </div>
         )}
           {/* Summary row */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
-            <div className="md:col-span-2 bg-gradient-to-br from-violet-950/60 to-indigo-950/40 border border-violet-700/30 rounded-2xl p-6">
-              <p className="text-violet-300 text-xs font-semibold uppercase tracking-widest mb-2">Estimated Market Value</p>
-              <p className="text-5xl font-black text-white mb-1">${result.suggested_salary.toLocaleString()}</p>
-              <p className="text-slate-400 text-sm">annual base salary · United States mid-market</p>
+            <div className="md:col-span-2 bg-white border border-violet-200 rounded-2xl p-6 shadow-sm">
+              {(() => {
+                const s = result.suggested_salary;
+                const entry   = Math.round(s * 0.72 / 5000) * 5000;
+                const junior  = Math.round(s * 0.87 / 5000) * 5000;
+                const senior  = Math.round(s * 1.22 / 5000) * 5000;
+                const lead    = Math.round(s * 1.45 / 5000) * 5000;
+                const floor   = Math.round(s * 0.93 / 1000) * 1000;
+                const ceiling = Math.round(s * 1.13 / 1000) * 1000;
+                const youPct  = Math.round(((s - entry) / (lead - entry)) * 100);
+
+                const markers = [
+                  { label: 'Entry', value: entry, pct: 0 },
+                  { label: 'Junior', value: junior, pct: Math.round(((junior - entry) / (lead - entry)) * 100) },
+                  { label: 'You ★', value: s, pct: youPct, highlight: true },
+                  { label: 'Senior', value: senior, pct: Math.round(((senior - entry) / (lead - entry)) * 100) },
+                  { label: 'Lead', value: lead, pct: 100 },
+                ];
+
+                return (
+                  <>
+                    <p className="text-violet-600 text-xs font-semibold uppercase tracking-widest mb-2">Estimated Market Value</p>
+                    <p className="text-5xl font-black text-slate-900 mb-1">${s.toLocaleString()}</p>
+                    <p className="text-slate-500 text-sm mb-6">annual base salary · United States mid-market</p>
+
+                    {/* Salary spectrum bar */}
+                    <div className="space-y-2">
+                      <p className="text-xs text-slate-500 uppercase tracking-wider">Market Range for this Role</p>
+                      <div className="relative h-3 rounded-full overflow-visible bg-gradient-to-r from-violet-100 via-violet-400 to-violet-600">
+                        {/* You marker */}
+                        <div
+                          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center"
+                          style={{ left: `${youPct}%` }}
+                        >
+                          <div className="w-5 h-5 rounded-full bg-white border-2 border-violet-400 shadow-lg shadow-violet-500/60 z-10 relative" />
+                          <div className="absolute -top-1 w-5 h-5 rounded-full bg-violet-400/30 animate-ping" />
+                        </div>
+                      </div>
+
+                      {/* Scale labels */}
+                      <div className="relative h-10">
+                        {markers.map((m) => (
+                          <div
+                            key={m.label}
+                            className="absolute flex flex-col items-center"
+                            style={{ left: `${m.pct}%`, transform: 'translateX(-50%)' }}
+                          >
+                            <p className={`text-[10px] font-semibold whitespace-nowrap ${m.highlight ? 'text-violet-600' : 'text-slate-500'}`}>
+                              {m.label}
+                            </p>
+                            <p className={`text-[10px] whitespace-nowrap ${m.highlight ? 'text-slate-900' : 'text-slate-500'}`}>
+                              ${(m.value / 1000).toFixed(0)}K
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Negotiation chips */}
+                    <div className="grid grid-cols-3 gap-2 mt-4">
+                      <div className="bg-violet-50 rounded-xl p-3 text-center">
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Negotiate Floor</p>
+                        <p className="text-sm font-bold text-slate-900">${floor.toLocaleString()}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Don't go below</p>
+                      </div>
+                      <div className="bg-violet-100 border border-violet-300 rounded-xl p-3 text-center">
+                        <p className="text-[10px] text-violet-600 uppercase tracking-wider mb-1">Your Estimate</p>
+                        <p className="text-sm font-bold text-slate-900">${s.toLocaleString()}</p>
+                        <p className="text-[10px] text-violet-500 mt-0.5">Mid-market</p>
+                      </div>
+                      <div className="bg-violet-50 rounded-xl p-3 text-center">
+                        <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Stretch Ask</p>
+                        <p className="text-sm font-bold text-slate-900">${ceiling.toLocaleString()}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Open the ask here</p>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
-            <div className="bg-slate-900/60 border border-slate-700/30 rounded-2xl p-6">
-              <p className="text-slate-400 text-xs font-semibold uppercase tracking-widest mb-3">Power Skills</p>
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+              <p className="text-slate-500 text-xs font-semibold uppercase tracking-widest mb-3">Power Skills</p>
               <ul className="space-y-1.5">
                 {result.reframed_skills.slice(0, 4).map((s, i) => (
-                  <li key={i} className="flex items-start gap-2 text-xs text-slate-300">
-                    <span className="text-violet-400 mt-0.5 shrink-0">✦</span>
+                  <li key={i} className="flex items-start gap-2 text-xs text-slate-700">
+                    <span className="text-violet-600 mt-0.5 shrink-0">✦</span>
                     <span>{s}</span>
                   </li>
                 ))}
@@ -206,12 +290,12 @@ export function ResumeGrader() {
           {/* Job matches */}
           <div className="mb-8 flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-white">Job Matches</h2>
-              <p className="text-slate-400 text-sm mt-1">Ranked by fit to your background</p>
+              <h2 className="text-2xl font-bold text-slate-900">Job Matches</h2>
+              <p className="text-slate-500 text-sm mt-1">Ranked by fit to your background</p>
             </div>
             <button
               onClick={reset}
-              className="flex items-center gap-2 text-sm text-slate-400 hover:text-white border border-slate-700/40 hover:border-slate-600 rounded-xl px-4 py-2 transition-colors"
+              className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900 border border-slate-200 hover:border-slate-400 rounded-xl px-4 py-2 transition-colors"
             >
               <RefreshCw size={14} />
               New Analysis
@@ -228,15 +312,15 @@ export function ResumeGrader() {
           <div>
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-2xl font-bold text-white">Live Postings</h2>
-                <p className="text-slate-400 text-sm mt-1">
+                <h2 className="text-2xl font-bold text-slate-900">Live Postings</h2>
+                <p className="text-slate-500 text-sm mt-1">
                   AI-curated listings matching your top role —{' '}
-                  <span className="text-violet-400">{result.job_matches[0]?.title}</span>
+                  <span className="text-violet-600">{result.job_matches[0]?.title}</span>
                 </p>
               </div>
               {liveJobs && liveJobs.length > 0 && (
-                <span className="flex items-center gap-1.5 text-xs text-green-400 border border-green-700/30 bg-green-900/20 rounded-full px-3 py-1">
-                  <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />
+                <span className="flex items-center gap-1.5 text-xs text-green-700 border border-green-200 bg-green-50 rounded-full px-3 py-1">
+                  <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
                   {liveJobs.length} listings
                 </span>
               )}
@@ -245,10 +329,10 @@ export function ResumeGrader() {
             {liveJobsLoading && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="bg-slate-900/40 border border-slate-700/20 rounded-2xl p-5 animate-pulse">
-                    <div className="h-4 bg-slate-700/40 rounded w-3/4 mb-3" />
-                    <div className="h-3 bg-slate-700/30 rounded w-1/2 mb-2" />
-                    <div className="h-3 bg-slate-700/20 rounded w-2/3" />
+                  <div key={i} className="bg-white border border-slate-200 rounded-2xl p-5 animate-pulse">
+                    <div className="h-4 bg-slate-200 rounded w-3/4 mb-3" />
+                    <div className="h-3 bg-slate-200/80 rounded w-1/2 mb-2" />
+                    <div className="h-3 bg-slate-100 rounded w-2/3" />
                   </div>
                 ))}
               </div>
@@ -257,27 +341,27 @@ export function ResumeGrader() {
             {!liveJobsLoading && liveJobs && liveJobs.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {liveJobs.map((job, i) => (
-                  <div key={i} className="bg-slate-900/50 border border-slate-700/30 rounded-2xl p-5 flex flex-col gap-3 hover:border-violet-600/40 transition-colors group">
+                  <div key={i} className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col gap-3 hover:border-violet-300 transition-colors group shadow-sm">
                     <div>
-                      <h3 className="text-white font-semibold text-sm leading-tight">{job.title}</h3>
-                      <p className="text-slate-400 text-xs mt-0.5">{job.company}</p>
+                      <h3 className="text-slate-900 font-semibold text-sm leading-tight">{job.title}</h3>
+                      <p className="text-slate-500 text-xs mt-0.5">{job.company}</p>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {job.tags.map((tag, t) => (
-                        <span key={t} className="bg-violet-900/30 border border-violet-700/30 text-violet-300 text-xs px-2 py-0.5 rounded-full">
+                        <span key={t} className="bg-violet-50 border border-violet-200 text-violet-700 text-xs px-2 py-0.5 rounded-full">
                           {tag}
                         </span>
                       ))}
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-500">{job.location}</span>
-                      <span className="text-green-400 font-medium">{job.salary_range}</span>
+                      <span className="text-green-600 font-medium">{job.salary_range}</span>
                     </div>
                     <a
                       href={job.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-auto flex items-center justify-center gap-1.5 w-full border border-slate-700/40 group-hover:border-violet-600/50 group-hover:bg-violet-900/20 text-slate-400 group-hover:text-violet-300 text-xs font-medium py-2 rounded-xl transition-all"
+                      className="mt-auto flex items-center justify-center gap-1.5 w-full border border-slate-200 group-hover:border-violet-400 group-hover:bg-violet-50 text-slate-500 group-hover:text-violet-600 text-xs font-medium py-2 rounded-xl transition-all"
                     >
                       <ExternalLink size={12} />
                       View on LinkedIn
@@ -301,8 +385,8 @@ export function ResumeGrader() {
         {/* Left: form */}
         <div className="space-y-5">
           <div>
-            <h2 className="text-3xl font-bold text-white mb-2">Analyze Your Fit</h2>
-            <p className="text-slate-400 text-sm leading-relaxed">
+            <h2 className="text-3xl font-bold text-slate-900 mb-2">Analyze Your Fit</h2>
+            <p className="text-slate-500 text-sm leading-relaxed">
               Upload your resume and optionally paste a job posting. We'll score your fit and surface the best-matched roles on the market.
             </p>
           </div>
@@ -315,8 +399,8 @@ export function ResumeGrader() {
             onClick={() => inputRef.current?.click()}
             className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all duration-200 ${
               dragging
-                ? 'border-violet-500 bg-violet-900/20'
-                : 'border-slate-700/50 bg-slate-900/20 hover:border-violet-600/50 hover:bg-violet-900/10'
+                ? 'border-violet-500 bg-violet-50'
+                : 'border-slate-200 bg-white hover:border-violet-400 hover:bg-violet-50'
             }`}
           >
             <input
@@ -328,14 +412,14 @@ export function ResumeGrader() {
             />
             {file ? (
               <div className="flex flex-col items-center gap-2">
-                <FileText size={28} className="text-violet-400" />
-                <p className="text-violet-300 font-medium text-sm">{file.name}</p>
+                <FileText size={28} className="text-violet-600" />
+                <p className="text-violet-700 font-medium text-sm">{file.name}</p>
                 <p className="text-slate-500 text-xs">Click to change</p>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3">
-                <Upload size={28} className="text-slate-500" />
-                <p className="text-white text-sm font-medium">Drop your resume here</p>
+                <Upload size={28} className="text-slate-400" />
+                <p className="text-slate-900 text-sm font-medium">Drop your resume here</p>
                 <p className="text-slate-500 text-xs">PDF, DOCX, or TXT · Optional but recommended</p>
               </div>
             )}
@@ -347,7 +431,7 @@ export function ResumeGrader() {
             placeholder="Target role (e.g. Product Manager)"
             value={jobTitle}
             onChange={(e) => setJobTitle(e.target.value)}
-            className="w-full bg-slate-900/40 border border-slate-700/40 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 outline-none focus:border-violet-500/60 transition-colors"
+            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-violet-400 transition-colors"
           />
 
           {/* Job description */}
@@ -360,9 +444,15 @@ export function ResumeGrader() {
               placeholder="Paste the full job description here to get a specific fit score..."
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
-              className="w-full bg-slate-900/40 border border-slate-700/40 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 outline-none focus:border-violet-500/60 transition-colors resize-none"
+              className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-900 placeholder-slate-400 outline-none focus:border-violet-400 transition-colors resize-none"
             />
           </div>
+
+          {analyzeError && (
+            <div className="bg-rose-50 border border-rose-200 rounded-xl px-4 py-3 text-sm text-rose-700">
+              ⚠️ {analyzeError}
+            </div>
+          )}
 
           <button
             onClick={analyze}
@@ -385,8 +475,8 @@ export function ResumeGrader() {
 
         {/* Right: info */}
         <div className="space-y-6 lg:pt-14">
-          <div className="bg-slate-900/40 border border-slate-700/20 rounded-2xl p-6">
-            <p className="text-xs text-violet-400 font-semibold uppercase tracking-widest mb-4">What you'll get</p>
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+            <p className="text-xs text-violet-600 font-semibold uppercase tracking-widest mb-4">What you'll get</p>
             <ul className="space-y-4">
               {[
                 { icon: '💰', title: 'Market Value Estimate', desc: 'Your realistic mid-market salary based on your background and role.' },
@@ -397,8 +487,8 @@ export function ResumeGrader() {
                 <li key={item.title} className="flex items-start gap-3">
                   <span className="text-xl shrink-0">{item.icon}</span>
                   <div>
-                    <p className="text-white text-sm font-medium">{item.title}</p>
-                    <p className="text-slate-400 text-xs mt-0.5">{item.desc}</p>
+                    <p className="text-slate-900 text-sm font-medium">{item.title}</p>
+                    <p className="text-slate-500 text-xs mt-0.5">{item.desc}</p>
                   </div>
                 </li>
               ))}

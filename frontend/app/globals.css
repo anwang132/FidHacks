@@ -1,11 +1,87 @@
 @import "tailwindcss";
 
+@theme {
+  /* Pink palette — replaces violet/indigo/purple everywhere */
+  --color-violet-50: #fdf4fc;
+  --color-violet-100: #fae4f9;
+  --color-violet-200: #f5cff1;
+  --color-violet-300: #e99ae2;
+  --color-violet-400: #d869cf;
+  --color-violet-500: #c143bc;
+  --color-violet-600: #993494;
+  --color-violet-700: #762773;
+  --color-violet-800: #551c53;
+  --color-violet-900: #3c1339;
+  --color-violet-950: #1f091f;
+
+  --color-indigo-50: #fdf4fc;
+  --color-indigo-100: #fae4f9;
+  --color-indigo-200: #f5cff1;
+  --color-indigo-300: #e99ae2;
+  --color-indigo-400: #d869cf;
+  --color-indigo-500: #c143bc;
+  --color-indigo-600: #993494;
+  --color-indigo-700: #762773;
+  --color-indigo-800: #551c53;
+  --color-indigo-900: #3c1339;
+  --color-indigo-950: #1f091f;
+
+  --color-purple-50: #fdf4fc;
+  --color-purple-100: #fae4f9;
+  --color-purple-200: #f5cff1;
+  --color-purple-300: #e99ae2;
+  --color-purple-400: #d869cf;
+  --color-purple-500: #c143bc;
+  --color-purple-600: #993494;
+  --color-purple-700: #762773;
+  --color-purple-800: #551c53;
+  --color-purple-900: #3c1339;
+  --color-purple-950: #1f091f;
+
+  /* Sage palette — replaces teal/emerald/green everywhere */
+  --color-teal-50: #f2faf5;
+  --color-teal-100: #dbf0e4;
+  --color-teal-200: #b2dbbf;
+  --color-teal-300: #7dc598;
+  --color-teal-400: #50ae77;
+  --color-teal-500: #3b9260;
+  --color-teal-600: #2d7149;
+  --color-teal-700: #215437;
+  --color-teal-800: #173c27;
+  --color-teal-900: #0f2619;
+  --color-teal-950: #07130d;
+
+  --color-emerald-50: #f2faf5;
+  --color-emerald-100: #dbf0e4;
+  --color-emerald-200: #b2dbbf;
+  --color-emerald-300: #7dc598;
+  --color-emerald-400: #50ae77;
+  --color-emerald-500: #3b9260;
+  --color-emerald-600: #2d7149;
+  --color-emerald-700: #215437;
+  --color-emerald-800: #173c27;
+  --color-emerald-900: #0f2619;
+  --color-emerald-950: #07130d;
+
+  --color-green-50: #f2faf5;
+  --color-green-100: #dbf0e4;
+  --color-green-200: #b2dbbf;
+  --color-green-300: #7dc598;
+  --color-green-400: #50ae77;
+  --color-green-500: #3b9260;
+  --color-green-600: #2d7149;
+  --color-green-700: #215437;
+  --color-green-800: #173c27;
+  --color-green-900: #0f2619;
+  --color-green-950: #07130d;
+}
+
 :root {
-  --bg-primary: #0f0a1e;
-  --bg-card: #1a1035;
-  --purple-deep: #4c1d95;
-  --purple-mid: #7c3aed;
-  --purple-light: #a78bfa;
+  --bg-primary: #faf5fa;
+  --bg-card: #ffffff;
+  --purple-deep: #762773;
+  --purple-mid: #993494;
+  --purple-light: #d869cf;
   --coral: #f87171;
   --coral-bright: #fb923c;
   --white: #fafafa;
@@ -14,7 +90,7 @@
 
 body {
   background: var(--bg-primary);
-  color: var(--white);
+  color: #1e1e1e;
   font-family: 'Inter', Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -23,7 +99,6 @@ body {
   box-sizing: border-box;
 }
 
-/* Pulsing ring animation for hard mode mic */
 @keyframes pulse-ring {
   0% { transform: scale(1); opacity: 0.8; }
   50% { transform: scale(1.15); opacity: 0.4; }
@@ -34,7 +109,6 @@ body {
   animation: pulse-ring 2s ease-in-out infinite;
 }
 
-/* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 4px;
 }

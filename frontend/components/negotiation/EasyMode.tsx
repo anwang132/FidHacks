@@ -21,9 +21,55 @@ interface Node {
   options: Option[];
 }
 
+interface ChoiceLog {
+  q: number;
+  label: string;
+  quality: 'great' | 'good' | 'fair';
+}
+
 function fmt(n: number) {
   return `$${n.toLocaleString()}`;
 }
+
+function rateQuality(fb: string): 'great' | 'good' | 'fair' {
+  const lower = fb.toLowerCase();
+  if (
+    lower.includes('perfect') ||
+    lower.includes('masterclass') ||
+    lower.includes('#1') ||
+    lower.includes('exactly the right') ||
+    lower.includes('bold and effective') ||
+    lower.includes('ideal negotiation')
+  ) return 'great';
+  if (
+    lower.includes('vague') ||
+    lower.includes('weak') ||
+    lower.includes('without data') ||
+    lower.includes("doesn't") ||
+    lower.includes('can backfire')
+  ) return 'fair';
+  return 'good';
+}
+
+const NODE_TIPS: Record<string, string> = {
+  start: "Your opening sets the frame. Explore before accepting — never say yes immediately.",
+  node2_early: "Cite real data sources: Glassdoor, Levels.fyi, LinkedIn Salary. Data = objectivity.",
+  node2_soft: "A soft ask without data invites 'no.' Back every request with evidence.",
+  node2_anchor: "Anchoring high is proven. The first number shapes the entire conversation.",
+  node3_weak: "Specific metrics beat general claims. '15% retention lift' is 10× more powerful than 'strong results'.",
+  node3_data: "Frame your value in terms of what you'll do for them, not just what you've done.",
+  node3_medium: "Opening the full package conversation early gives you more levers to work with.",
+  node3_strong: "With real leverage (competing offer), stay patient. Scarcity increases your value.",
+  node4_low: "Even a 3% gain today compounds into thousands over your career baseline.",
+  node4_mid: "Counter with a specific round number — it signals you know your worth.",
+  node4_high: "Once base is secured, pivot immediately to bonus and equity.",
+  node5: "Signing bonuses don't affect your raise baseline — they're purely additive to year 1.",
+  node6_bonus: "Frame your bonus ask around a real cost (transition, relocation). Concrete reasons work.",
+  node6_equity: "RSU cliff date and vesting schedule determine true risk. Always ask both.",
+  node6_remote: "Remote flexibility saves $2k–8k/year in commute costs. It has real dollar value.",
+  node7: "L&D budget is almost always negotiable — HR rarely defends it hard.",
+  node8: "End with a forward-looking statement about impact. Never just say 'I accept.'",
+};
 
 /**
  * 8-question salary negotiation tree.
@@ -375,15 +421,24 @@ export function EasyMode() {
   const base = baseSalary || 70000;
 
   const tree = useMemo(() => buildTree(base), [base]);
+  const mktLow  = Math.round(base * 1.08);
+  const mktHigh = Math.round(base * 1.15);
 
-  const [nodeId, setNodeId]             = useState('start');
+  const [nodeId, setNodeId]                 = useState('start');
   const [negotiatedBase, setNegotiatedBase] = useState(base);
-  const [signingBonus, setSigningBonus] = useState(0);
-  const [done, setDone]                 = useState(false);
-  const [feedback, setFeedback]         = useState('');
-  const [questionNum, setQuestionNum]   = useState(1);
+  const [signingBonus, setSigningBonus]     = useState(0);
+  const [done, setDone]                     = useState(false);
+  const [feedback, setFeedback]             = useState('');
+  const [questionNum, setQuestionNum]       = useState(1);
+  const [choiceLog, setChoiceLog]           = useState<ChoiceLog[]>([]);
 
   const node = tree.find((n) => n.id === nodeId)!;
+
+  const gain       = negotiatedBase - base;
+  const gainPct    = ((gain / base) * 100).toFixed(1);
+  const totalY1    = negotiatedBase + signingBonus;
+  const gaugePct   = Math.min(100, Math.max(0, (gain / (base * 0.15)) * 100));
+  const tip        = NODE_TIPS[nodeId] ?? "Think strategically before responding.";
 
   const choose = (opt: Option) => {
     if (opt.updateBase !== undefined) {
@@ -391,6 +446,11 @@ export function EasyMode() {
       setNegotiatedSalary(opt.updateBase);
     }
     if (opt.updateBonus !== undefined) setSigningBonus(opt.updateBonus);
+    const quality = rateQuality(opt.feedback);
+    setChoiceLog(prev => [
+      ...prev,
+      { q: questionNum, label: opt.label.slice(0, 38) + (opt.label.length > 38 ? '…' : ''), quality },
+    ]);
     setFeedback(opt.feedback);
     if (!opt.nextId) {
       setDone(true);
@@ -401,9 +461,8 @@ export function EasyMode() {
   };
 
   if (done) {
-    const gained   = negotiatedBase - base;
-    const pct      = ((gained / base) * 100).toFixed(1);
-    const totalY1  = negotiatedBase + signingBonus;
+    const gained  = negotiatedBase - base;
+    const pct     = ((gained / base) * 100).toFixed(1);
 
     return (
       <motion.div
@@ -412,35 +471,48 @@ export function EasyMode() {
         className="flex flex-col items-center text-center px-6 py-12 gap-6 max-w-md mx-auto"
       >
         <div className="text-5xl">{gained > 0 || signingBonus > 0 ? '🎉' : '📋'}</div>
-        <h2 className="text-2xl font-bold text-white">Round 1 Complete!</h2>
+        <h2 className="text-2xl font-bold text-slate-900">Round 1 Complete!</h2>
 
-        {/* Base salary card */}
-        <div className="bg-violet-900/40 border border-violet-700/30 rounded-3xl px-8 py-6 w-full">
-          <p className="text-violet-300 text-xs mb-1">NEGOTIATED BASE</p>
-          <p className="text-4xl font-bold text-white">{fmt(negotiatedBase)}</p>
+        <div className="bg-violet-50 border border-violet-300 rounded-3xl px-8 py-6 w-full">
+          <p className="text-violet-600 text-xs mb-1">NEGOTIATED BASE</p>
+          <p className="text-4xl font-bold text-slate-900">{fmt(negotiatedBase)}</p>
           {gained > 0 ? (
-            <p className="text-green-400 text-sm mt-1">
+            <p className="text-teal-600 text-sm mt-1">
               +{fmt(gained)} above offer ({pct}% increase)
             </p>
           ) : (
-            <p className="text-slate-400 text-sm mt-1">Accepted the original offer</p>
+            <p className="text-slate-500 text-sm mt-1">Accepted the original offer</p>
           )}
         </div>
 
-        {/* Signing bonus card (if earned) */}
         {signingBonus > 0 && (
-          <div className="bg-teal-900/30 border border-teal-700/30 rounded-2xl px-6 py-4 w-full flex justify-between items-center">
+          <div className="bg-teal-50 border border-teal-200 rounded-2xl px-6 py-4 w-full flex justify-between items-center">
             <div className="text-left">
-              <p className="text-teal-300 text-xs">SIGNING BONUS</p>
-              <p className="text-white font-bold text-xl">{fmt(signingBonus)}</p>
+              <p className="text-teal-600 text-xs">SIGNING BONUS</p>
+              <p className="text-slate-900 font-bold text-xl">{fmt(signingBonus)}</p>
               <p className="text-slate-500 text-xs">One-time, first paycheck</p>
             </div>
             <div className="text-right">
               <p className="text-slate-400 text-xs">YEAR 1 TOTAL</p>
-              <p className="text-green-300 font-bold text-2xl">{fmt(totalY1)}</p>
+              <p className="text-teal-600 font-bold text-2xl">{fmt(totalY1)}</p>
             </div>
           </div>
         )}
+
+        {/* Move quality summary */}
+        <div className="w-full bg-white border border-slate-200 rounded-2xl px-6 py-4 shadow-sm">
+          <p className="text-slate-400 text-xs mb-3 font-medium uppercase tracking-widest">Your Move Quality</p>
+          <div className="flex gap-3 justify-center">
+            {(['great', 'good', 'fair'] as const).map(q => (
+              <div key={q} className={`flex-1 rounded-xl px-2 py-2 text-center border ${q === 'great' ? 'bg-green-50 border-green-200' : q === 'good' ? 'bg-blue-50 border-blue-200' : 'bg-amber-50 border-amber-200'}`}>
+                <p className={`text-xl font-bold ${q === 'great' ? 'text-green-600' : q === 'good' ? 'text-blue-600' : 'text-amber-600'}`}>
+                  {choiceLog.filter(c => c.quality === q).length}
+                </p>
+                <p className="text-slate-500 text-[10px] capitalize">{q}</p>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {feedback && (
           <p className="text-slate-400 text-sm max-w-xs italic">"{feedback}"</p>
@@ -454,90 +526,286 @@ export function EasyMode() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col px-4 py-10 max-w-md mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
-        <div className="w-10 h-10 bg-violet-600 rounded-2xl flex items-center justify-center text-white font-bold text-lg">$</div>
+    <div className="min-h-screen lg:flex lg:justify-center lg:items-stretch bg-[#faf5fa]">
+
+      {/* ── LEFT SIDEBAR ─────────────────────────────────────── */}
+      <aside className="hidden lg:flex flex-col w-64 shrink-0 border-r border-violet-200/60 bg-white sticky top-0 h-screen overflow-y-auto px-5 py-8 gap-5">
+
+        {/* Live offer card */}
         <div>
-          <p className="text-white font-semibold text-sm">Salary Coach</p>
-          <p className="text-slate-500 text-xs">Starting offer: {fmt(base)}</p>
-        </div>
-        <span className="ml-auto bg-violet-600 text-white text-xs font-bold px-3 py-1 rounded-full">EASY</span>
-      </div>
-
-      {/* Live stats strip */}
-      {(negotiatedBase > base || signingBonus > 0) && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          className="mb-4 flex gap-2"
-        >
-          {negotiatedBase > base && (
-            <div className="flex-1 bg-green-900/30 border border-green-700/30 rounded-xl px-3 py-2 text-center">
-              <p className="text-green-400 text-xs">Base locked</p>
-              <p className="text-white font-bold text-sm">{fmt(negotiatedBase)}</p>
-            </div>
-          )}
-          {signingBonus > 0 && (
-            <div className="flex-1 bg-teal-900/30 border border-teal-700/30 rounded-xl px-3 py-2 text-center">
-              <p className="text-teal-300 text-xs">Signing bonus</p>
-              <p className="text-white font-bold text-sm">{fmt(signingBonus)}</p>
-            </div>
-          )}
-        </motion.div>
-      )}
-
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={nodeId}
-          initial={{ opacity: 0, x: 30 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -30 }}
-          transition={{ duration: 0.25 }}
-          className="flex-1"
-        >
-          <div className="bg-indigo-50/5 border border-indigo-200/10 rounded-3xl p-6 mb-6">
-            <p className="text-violet-400 text-xs font-medium mb-3 tracking-widest">{node.question}</p>
-            <p className="text-white text-xl font-medium leading-snug">{node.recruiterLine}</p>
-          </div>
-
-          {feedback && (
-            <motion.div
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-4 bg-amber-900/20 border border-amber-700/30 rounded-xl px-4 py-3"
+          <p className="text-slate-500 text-[10px] font-medium uppercase tracking-widest mb-2">Live Offer</p>
+          <div className="bg-violet-50 border border-violet-200 rounded-2xl px-4 py-4">
+            <p className="text-slate-500 text-xs mb-1">Negotiated Base</p>
+            <motion.p
+              key={negotiatedBase}
+              initial={{ scale: 1.1, color: '#50ae77' }}
+              animate={{ scale: 1, color: '#1e1e1e' }}
+              transition={{ duration: 0.4 }}
+              className="text-2xl font-bold text-slate-900"
             >
-              <p className="text-amber-200 text-xs leading-relaxed">💡 {feedback}</p>
+              {fmt(negotiatedBase)}
+            </motion.p>
+            {gain > 0 && (
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-green-600 text-xs mt-1"
+              >
+                +{fmt(gain)} ({gainPct}% gain)
+              </motion.p>
+            )}
+          </div>
+        </div>
+
+        {/* Gain progress gauge */}
+        <div>
+          <div className="flex justify-between text-[10px] text-slate-500 mb-1.5">
+            <span>Gain Progress</span>
+            <span>{gaugePct.toFixed(0)}%</span>
+          </div>
+          <div className="h-2 bg-violet-100 rounded-full overflow-hidden">
+            <motion.div
+              animate={{ width: `${gaugePct}%` }}
+              transition={{ type: 'spring', stiffness: 60, damping: 15 }}
+              className="h-full bg-gradient-to-r from-violet-500 to-green-400 rounded-full"
+            />
+          </div>
+          <p className="text-slate-600 text-[10px] mt-1">Target: +15% = {fmt(Math.round(base * 0.15))}</p>
+        </div>
+
+        {/* Signing bonus chip */}
+        <AnimatePresence>
+          {signingBonus > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 8, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="bg-teal-50 border border-teal-200 rounded-xl px-4 py-3"
+            >
+              <p className="text-teal-600 text-xs font-medium">+ Signing Bonus</p>
+              <p className="text-slate-900 font-bold">{fmt(signingBonus)}</p>
+              <p className="text-slate-500 text-xs mt-0.5">Year 1 total: {fmt(totalY1)}</p>
             </motion.div>
           )}
+        </AnimatePresence>
 
-          <p className="text-slate-500 text-xs mb-4">Choose your response</p>
+        <div className="border-t border-violet-100" />
 
-          <div className="space-y-3">
-            {node.options.map((opt, i) => (
-              <motion.button
+        {/* Choice history */}
+        <div className="flex-1 overflow-hidden">
+          <p className="text-slate-500 text-[10px] font-medium uppercase tracking-widest mb-2">Your Moves</p>
+          {choiceLog.length === 0 ? (
+            <p className="text-slate-700 text-xs italic">No choices yet</p>
+          ) : (
+            <div className="space-y-2">
+              <AnimatePresence initial={false}>
+                {choiceLog.map((c, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    className="flex items-start gap-2"
+                  >
+                    <span className={`mt-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                      c.quality === 'great' ? 'bg-green-50 text-green-600'
+                      : c.quality === 'fair' ? 'bg-amber-50 text-amber-600'
+                      : 'bg-blue-50 text-blue-600'
+                    }`}>
+                      {c.quality === 'great' ? '★' : c.quality === 'fair' ? '△' : '●'}
+                    </span>
+                    <p className="text-slate-400 text-[10px] leading-snug">
+                      <span className="text-slate-600">Q{c.q}:</span> {c.label}
+                    </p>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
+
+        {/* Question progress */}
+        <div className="mt-auto">
+          <p className="text-slate-500 text-[10px] font-medium uppercase tracking-widest mb-2">Progress</p>
+          <div className="grid grid-cols-8 gap-1 mb-1">
+            {Array.from({ length: 8 }, (_, i) => (
+              <div
                 key={i}
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => choose(opt)}
-                className="w-full text-left bg-violet-950/30 hover:bg-violet-900/40 border border-violet-700/30 hover:border-violet-600/50 rounded-2xl px-5 py-4 text-sm text-white transition-all duration-150"
-              >
-                {opt.label}
-              </motion.button>
+                className={`h-2 rounded-full transition-all duration-300 ${
+                  i + 1 < questionNum ? 'bg-teal-500'
+                  : i + 1 === questionNum ? 'bg-violet-500'
+                  : 'bg-violet-100'
+                }`}
+              />
             ))}
           </div>
-        </motion.div>
-      </AnimatePresence>
+          <p className="text-slate-500 text-[10px]">Question {questionNum} of 8</p>
+        </div>
+      </aside>
 
-      {/* Progress bar — 8 steps */}
-      <div className="mt-8 flex gap-1">
-        {Array.from({ length: 8 }, (_, i) => i + 1).map((n) => (
-          <div
-            key={n}
-            className={`h-1 flex-1 rounded-full transition-all duration-300 ${n <= questionNum ? 'bg-violet-500' : 'bg-violet-900/40'}`}
-          />
-        ))}
-      </div>
+      {/* ── CENTER ───────────────────────────────────────────── */}
+      <main className="flex flex-col min-h-screen w-full lg:w-[480px] lg:shrink-0 px-4 py-10">
+
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-8">
+          <div className="w-10 h-10 bg-violet-600 rounded-2xl flex items-center justify-center text-white font-bold text-lg">$</div>
+          <div>
+            <p className="text-slate-900 font-semibold text-sm">Salary Coach</p>
+            <p className="text-slate-500 text-xs">Starting offer: {fmt(base)}</p>
+          </div>
+          <span className="ml-auto bg-violet-600 text-white text-xs font-bold px-3 py-1 rounded-full">EASY</span>
+        </div>
+
+        {/* Mobile-only live stats strip */}
+        {(negotiatedBase > base || signingBonus > 0) && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="mb-4 flex gap-2 lg:hidden"
+          >
+            {negotiatedBase > base && (
+              <div className="flex-1 bg-teal-50 border border-teal-200 rounded-xl px-3 py-2 text-center">
+                <p className="text-teal-600 text-xs">Base locked</p>
+                <p className="text-slate-900 font-bold text-sm">{fmt(negotiatedBase)}</p>
+              </div>
+            )}
+            {signingBonus > 0 && (
+              <div className="flex-1 bg-teal-50 border border-teal-200 rounded-xl px-3 py-2 text-center">
+                <p className="text-teal-600 text-xs">Signing bonus</p>
+                <p className="text-slate-900 font-bold text-sm">{fmt(signingBonus)}</p>
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={nodeId}
+            initial={{ opacity: 0, x: 30 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -30 }}
+            transition={{ duration: 0.25 }}
+            className="flex-1"
+          >
+            <div className="bg-violet-50 border border-violet-200 rounded-3xl p-6 mb-6">
+              <p className="text-violet-600 text-xs font-medium mb-3 tracking-widest">{node.question}</p>
+              <p className="text-slate-900 text-xl font-medium leading-snug">{node.recruiterLine}</p>
+            </div>
+
+            {feedback && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3"
+              >
+                <p className="text-amber-700 text-xs leading-relaxed">💡 {feedback}</p>
+              </motion.div>
+            )}
+
+            <p className="text-slate-500 text-xs mb-4">Choose your response</p>
+
+            <div className="space-y-3">
+              {node.options.map((opt, i) => (
+                <motion.button
+                  key={i}
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => choose(opt)}
+                  className="w-full text-left bg-white hover:bg-violet-50 border border-violet-200 hover:border-violet-400 rounded-2xl px-5 py-4 text-sm text-slate-800 transition-all duration-150 shadow-sm"
+                >
+                  {opt.label}
+                </motion.button>
+              ))}
+            </div>
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Mobile progress bar */}
+        <div className="mt-8 flex gap-1 lg:hidden">
+          {Array.from({ length: 8 }, (_, i) => i + 1).map((n) => (
+            <div
+              key={n}
+              className={`h-1 flex-1 rounded-full transition-all duration-300 ${n <= questionNum ? 'bg-violet-500' : 'bg-violet-200'}`}
+            />
+          ))}
+        </div>
+      </main>
+
+      {/* ── RIGHT SIDEBAR ────────────────────────────────────── */}
+      <aside className="hidden lg:flex flex-col w-64 shrink-0 border-l border-violet-200/60 bg-white sticky top-0 h-screen overflow-y-auto px-5 py-8 gap-5">
+
+        {/* Pro tip — animates per question */}
+        <div>
+          <p className="text-slate-500 text-[10px] font-medium uppercase tracking-widest mb-2">Pro Tip</p>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={nodeId}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2 }}
+              className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3"
+            >
+              <p className="text-amber-700 text-xs leading-relaxed">💡 {tip}</p>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        {/* Market context */}
+        <div>
+          <p className="text-slate-500 text-[10px] font-medium uppercase tracking-widest mb-2">Market Context</p>
+          <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 space-y-2.5">
+            {[
+              { label: 'Their Offer', value: fmt(base), color: 'text-slate-900' },
+              { label: 'Market Low (+8%)', value: fmt(mktLow), color: 'text-blue-600' },
+              { label: 'Market High (+15%)', value: fmt(mktHigh), color: 'text-green-600' },
+              { label: 'Your Current', value: fmt(negotiatedBase), color: gain > 0 ? 'text-green-600' : 'text-slate-500' },
+            ].map(row => (
+              <div key={row.label} className="flex justify-between items-center">
+                <span className="text-slate-400 text-[11px]">{row.label}</span>
+                <span className={`text-[11px] font-medium ${row.color}`}>{row.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t border-violet-100" />
+
+        {/* Core principles */}
+        <div>
+          <p className="text-slate-500 text-[10px] font-medium uppercase tracking-widest mb-2">Core Principles</p>
+          <div className="space-y-2.5">
+            {[
+              { icon: '📊', text: 'Data beats feelings' },
+              { icon: '⚓', text: 'Anchor high first' },
+              { icon: '🔄', text: 'Always counter once' },
+              { icon: '📦', text: 'Negotiate the full package' },
+            ].map((p, i) => (
+              <div key={i} className="flex items-center gap-2.5">
+                <span className="text-sm shrink-0">{p.icon}</span>
+                <p className="text-slate-400 text-xs">{p.text}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Move quality scoreboard */}
+        <div className="mt-auto">
+          <p className="text-slate-500 text-[10px] font-medium uppercase tracking-widest mb-2">Move Quality</p>
+          <div className="flex gap-2">
+            {([
+              { q: 'great' as const, label: 'Great', color: 'text-green-600', bg: 'bg-green-50 border-green-200' },
+              { q: 'good'  as const, label: 'Good',  color: 'text-blue-600',  bg: 'bg-blue-50 border-blue-200'  },
+              { q: 'fair'  as const, label: 'Fair',  color: 'text-amber-600', bg: 'bg-amber-50 border-amber-200' },
+            ]).map(({ q, label, color, bg }) => (
+              <div key={q} className={`flex-1 border rounded-xl px-2 py-2 text-center ${bg}`}>
+                <p className={`text-lg font-bold ${color}`}>{choiceLog.filter(c => c.quality === q).length}</p>
+                <p className="text-slate-500 text-[10px]">{label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </aside>
+
     </div>
   );
 }

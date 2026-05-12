@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import asyncio
 from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from google import genai
@@ -10,6 +11,8 @@ router = APIRouter()
 
 _client: genai.Client | None = None
 
+MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+
 
 def get_client() -> genai.Client:
     global _client
@@ -18,72 +21,86 @@ def get_client() -> genai.Client:
     return _client
 
 
-FALLBACK = {
-    "reframed_skills": [
-        "Led cross-functional initiatives driving measurable outcomes",
-        "Managed stakeholder communications and project timelines",
-        "Executed data-driven strategies with budget ownership",
-        "Built and mentored high-performance team members",
-        "Delivered complex technical solutions under tight deadlines",
-    ],
-    "suggested_salary": 85000,
-    "job_matches": [
-        {
-            "title": "Product Manager",
-            "company_type": "Tech / Mid-stage Startup",
-            "fit_score": 88,
-            "fit_label": "Strong Match",
-            "match_reasons": ["Leadership and execution experience aligns", "Cross-functional coordination is core to this role"],
-            "gap_areas": ["Deepen technical product knowledge"],
-            "salary_range": "$90,000 – $120,000",
-        },
-        {
-            "title": "Operations Manager",
-            "company_type": "Enterprise / Corporate",
-            "fit_score": 82,
-            "fit_label": "Strong Match",
-            "match_reasons": ["Stakeholder management experience is highly relevant", "Budget ownership background is a strong signal"],
-            "gap_areas": ["Build experience with enterprise tooling"],
-            "salary_range": "$85,000 – $110,000",
-        },
-        {
-            "title": "Strategy & Analytics Lead",
-            "company_type": "Consulting / Agency",
-            "fit_score": 74,
-            "fit_label": "Good Match",
-            "match_reasons": ["Data-driven mindset translates well", "Project delivery background is valued"],
-            "gap_areas": ["Quantify impact metrics more explicitly"],
-            "salary_range": "$80,000 – $105,000",
-        },
-        {
-            "title": "Program Manager",
-            "company_type": "Government / Nonprofit",
-            "fit_score": 70,
-            "fit_label": "Good Match",
-            "match_reasons": ["Team leadership experience is transferable", "Communication skills are a differentiator"],
-            "gap_areas": ["Gain familiarity with public sector workflows"],
-            "salary_range": "$75,000 – $95,000",
-        },
-        {
-            "title": "Growth Manager",
-            "company_type": "Early-stage Startup",
-            "fit_score": 63,
-            "fit_label": "Stretch Role",
-            "match_reasons": ["Execution mindset maps to growth roles", "Adaptability is a plus in startup environments"],
-            "gap_areas": ["Build hands-on growth/marketing tooling experience"],
-            "salary_range": "$80,000 – $115,000",
-        },
-    ],
-}
+ANALYSIS_PROMPT = """You are a job market analyst and career coach specializing in helping women land well-compensated roles.
+
+{context}
+
+Analyze the resume carefully and return a JSON object that:
+1. Reframes the person's specific experience in corporate, high-impact language
+2. Identifies 5 realistic job titles that fit this person's actual background, scored by fit
+
+{job_instruction}
+
+Return ONLY valid JSON — no markdown, no explanation:
+{{
+  "reframed_skills": [
+    "5 bullet points reframing their experience, beginning with strong action verbs"
+  ],
+  "suggested_salary": 85000,
+  "job_matches": [
+    {{
+      "title": "Exact Job Title",
+      "company_type": "Industry or company stage (e.g. 'Tech / Series B Startup')",
+      "fit_score": 88,
+      "fit_label": "Strong Match",
+      "match_reasons": ["Specific reason from the resume", "Second specific reason"],
+      "gap_areas": ["One concrete actionable gap"],
+      "salary_range": "$85,000 – $110,000"
+    }}
+  ]
+}}
+
+Rules:
+- reframed_skills: exactly 5 items grounded in this person's actual experience
+- suggested_salary: realistic mid-market USD annual integer
+- job_matches: exactly 5 items sorted by fit_score descending
+- fit_score: 0-100 integer
+- fit_label: "Excellent Match" (90+), "Strong Match" (75-89), "Good Match" (60-74), "Stretch Role" (below 60)
+- match_reasons: exactly 2 reasons that reference specific skills or experience from the resume
+- gap_areas: exactly 1 item
+- salary_range: realistic range for that role and market"""
 
 
-def extract_text_from_pdf(data: bytes) -> str:
-    try:
-        import fitz
-        doc = fitz.open(stream=data, filetype="pdf")
-        return "\n".join(page.get_text() for page in doc)
-    except Exception:
-        return ""
+def _build_context(job_title: str, job_description: str) -> tuple[str, str]:
+    job_instruction = (
+        "The user submitted a specific job posting — include it as the first match and score it precisely against the resume."
+        if job_description.strip()
+        else "Generate 5 realistic matching job titles based on this person's actual background."
+    )
+    if job_description.strip():
+        context = f'Job posting to evaluate:\n"""\n{job_description.strip()[:1500]}\n"""'
+    elif job_title.strip():
+        context = f"Target role: {job_title.strip()}"
+    else:
+        context = "No specific target role provided — suggest the best-fit roles based solely on the resume content."
+    return context, job_instruction
+
+
+async def _call_gemini(contents, max_tokens: int = 2048) -> str:
+    """Try each model in order, retrying once on 503."""
+    client = get_client()
+    config = types.GenerateContentConfig(
+        max_output_tokens=max_tokens,
+        thinking_config=types.ThinkingConfig(thinking_budget=0),
+    )
+    last_err = None
+    for model in MODELS:
+        for attempt in range(2):
+            try:
+                resp = await client.aio.models.generate_content(
+                    model=model, contents=contents, config=config
+                )
+                return resp.text
+            except Exception as e:
+                last_err = e
+                msg = str(e)
+                if "503" in msg or "UNAVAILABLE" in msg or "overload" in msg.lower():
+                    if attempt == 0:
+                        await asyncio.sleep(2)
+                        continue  # retry same model once
+                    break  # try next model
+                raise  # non-503 error — re-raise immediately
+    raise last_err
 
 
 @router.post("/parse-resume")
@@ -92,79 +109,43 @@ async def parse_resume(
     jobTitle: str = Form(""),
     jobDescription: str = Form(""),
 ):
-    resume_text = ""
+    file_bytes: bytes | None = None
+    mime_type = "text/plain"
 
-    if file:
+    if file and file.filename:
         raw = await file.read()
-        if file.content_type == "application/pdf" or (file.filename or "").endswith(".pdf"):
-            resume_text = extract_text_from_pdf(raw)
-        else:
-            resume_text = raw.decode("utf-8", errors="ignore")
+        if raw:
+            file_bytes = raw
+            fname = (file.filename or "").lower()
+            ct = (file.content_type or "").lower()
+            if "pdf" in ct or fname.endswith(".pdf"):
+                mime_type = "application/pdf"
+            elif "word" in ct or fname.endswith(".docx"):
+                mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            else:
+                mime_type = "text/plain"
 
-    context_block = ""
-    if resume_text:
-        context_block += f'\nResume:\n"""\n{resume_text[:3500]}\n"""'
-    if jobDescription.strip():
-        context_block += f'\n\nJob posting the user wants to evaluate:\n"""\n{jobDescription.strip()[:1500]}\n"""'
-    elif jobTitle.strip():
-        context_block += f"\n\nTarget role: {jobTitle.strip()}"
+    context, job_instruction = _build_context(jobTitle, jobDescription)
+    prompt_text = ANALYSIS_PROMPT.format(context=context, job_instruction=job_instruction)
 
-    if not context_block:
-        context_block = "\nTarget role: Software Engineer (no resume provided)"
-
-    prompt = f"""You are a job market analyst and career coach specializing in helping women land well-compensated roles.
-
-{context_block}
-
-Analyze the resume and return a JSON object that:
-1. Reframes the person's experience in corporate, high-impact language
-2. Identifies 5 real, realistic job titles that fit this person's background, scored by fit
-
-{"If a specific job posting was provided, include it as the first match and score it precisely against the resume." if jobDescription.strip() else "Generate 5 realistic matching job titles and company contexts."}
-
-Return ONLY valid JSON — no markdown, no explanation — with exactly this shape:
-{{
-  "reframed_skills": [
-    "5 bullet points reframing their experience in leadership/budget/impact language"
-  ],
-  "suggested_salary": 85000,
-  "job_matches": [
-    {{
-      "title": "Exact Job Title",
-      "company_type": "Company type or industry (e.g. 'Tech / Series B Startup')",
-      "fit_score": 88,
-      "fit_label": "Strong Match",
-      "match_reasons": ["Specific reason 1", "Specific reason 2"],
-      "gap_areas": ["One concrete skill or experience gap"],
-      "salary_range": "$85,000 – $110,000"
-    }}
-  ]
-}}
-
-Rules:
-- reframed_skills: exactly 5 items, corporate-ready, begin with strong action verbs
-- suggested_salary: integer, realistic mid-market USD annual salary for this person
-- job_matches: exactly 5 items sorted by fit_score descending
-- fit_score: 0-100 integer
-- fit_label: "Excellent Match" (90+), "Strong Match" (75-89), "Good Match" (60-74), "Stretch Role" (below 60)
-- match_reasons: exactly 2 specific, resume-grounded reasons
-- gap_areas: exactly 1 actionable gap
-- salary_range: realistic range for that specific role and market"""
+    # Build contents: multimodal when file present, plain string otherwise
+    if file_bytes:
+        contents = [
+            types.Part.from_bytes(data=file_bytes, mime_type=mime_type),
+            types.Part.from_text(text=prompt_text),
+        ]
+    else:
+        contents = prompt_text
 
     try:
-        response = await get_client().aio.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                max_output_tokens=2048,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
-            ),
-        )
-        raw_text = response.text
+        raw_text = await _call_gemini(contents)
         json_match = re.search(r"\{[\s\S]*\}", raw_text)
         if not json_match:
             raise ValueError("No JSON in response")
         return JSONResponse(content=json.loads(json_match.group()))
     except Exception as e:
-        print(f"parse-resume error: {e}")
-        return JSONResponse(content=FALLBACK)
+        print(f"[parse-resume] error: {type(e).__name__}: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={"error": "The AI is temporarily busy. Please try again in a moment."},
+        )
