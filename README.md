@@ -1,8 +1,8 @@
-# HerMoneyMoves
+# SHEconomy
 
 > AI-powered financial toolkit built for Gen-Z women to close the gender pay gap — one negotiation at a time.
 
-Built at **FidHacks 2025**.
+Built at **FidHacks 2026**.
 
 ---
 
