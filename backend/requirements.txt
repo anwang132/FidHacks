@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+google-genai
+python-multipart
+pymupdf
+python-dotenv
+pydantic
+yfinance
+httpx

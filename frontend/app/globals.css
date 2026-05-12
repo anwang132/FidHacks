@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #0f0a1e;
+  --bg-card: #1a1035;
+  --purple-deep: #4c1d95;
+  --purple-mid: #7c3aed;
+  --purple-light: #a78bfa;
+  --coral: #f87171;
+  --coral-bright: #fb923c;
+  --white: #fafafa;
+  --muted: #94a3b8;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--white);
+  font-family: 'Inter', Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Pulsing ring animation for hard mode mic */
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 0.4; }
+  100% { transform: scale(1); opacity: 0.8; }
+}
+
+.pulse-ring {
+  animation: pulse-ring 2s ease-in-out infinite;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--purple-mid);
+  border-radius: 2px;
+}
