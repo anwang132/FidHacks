@@ -8,7 +8,7 @@ Built at **FidHacks 2026**.
 
 ## What It Does
 
-Women who don't negotiate their first salary lose an average of **$500,000** over their career. HerMoneyMoves gives every woman the tools to fight back:
+Women who don't negotiate their first salary lose an average of **$500,000** over their career. SHEconomy gives every woman the tools to fight back:
 
 | Tool | What it does |
 |---|---|
@@ -132,11 +132,11 @@ Open [http://localhost:3000](http://localhost:3000).
 
 37% of women negotiate their salary every time, compared to 57% of men. That gap isn't a confidence problem — it's a practice problem. Nobody teaches young women how to negotiate, and the consequences compound silently: a woman who doesn't negotiate her first offer loses an average of $500,000 over her career, not just in salary but in every raise, bonus, and 401(k) match tied to that base.
 
-We built HerMoneyMoves because we believe the pay gap closes one conversation at a time — and that conversation should be practiced somewhere safe before it happens in real life. We wanted to build something that didn't just inform women about the gap, but actually gave them the reps to close it.
+We built SHEconomy because we believe the pay gap closes one conversation at a time — and that conversation should be practiced somewhere safe before it happens in real life. We wanted to build something that didn't just inform women about the gap, but actually gave them the reps to close it.
 
 ## What It Does
 
-HerMoneyMoves is a three-part AI toolkit targeted at Gen-Z women entering the workforce:
+SHEconomy is a three-part AI toolkit targeted at Gen-Z women entering the workforce:
 
 1. **Resume Fit Grader** — Upload a resume or paste a job posting. Gemini analyzes the fit, identifies skill gaps, reframes your experience using power language, and surfaces matching roles with real salary ranges and negotiation leverage points.
 
@@ -177,7 +177,7 @@ HerMoneyMoves is a three-part AI toolkit targeted at Gen-Z women entering the wo
 - Designing for a specific user (young women entering the workforce) changes every product decision — from the tone of the AI recruiter persona to the color palette to the framing of statistics.
 - The most impactful feature isn't always the most technically complex one. The raise impact slider — a 10-line calculation — was more "aha" than the voice pipeline.
 
-## What's Next for HerMoneyMoves
+## What's Next for SHEconomy
 
 - **Cohort mode:** Let a group of friends practice together and compare negotiated salaries — social accountability as a feature.
 - **Offer letter analyzer:** Paste a real offer letter; get a line-by-line breakdown of what's negotiable, what's standard, and what's a red flag.
